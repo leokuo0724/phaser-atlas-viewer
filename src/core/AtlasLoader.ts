@@ -24,15 +24,22 @@ export class AtlasLoader {
       // Validate texture matches atlas
       await this.validateTextureImage(textureFile, atlasData);
 
-      // Extract frame data
+      // Extract and sort frame data by filename
       const frames = atlasData.textures[0]?.frames || [];
-      const totalFrames = frames.length;
+      const sortedFrames = [...frames].sort((a, b) => {
+        // Sort by filename (natural sort for numbered sequences)
+        return a.filename.localeCompare(b.filename, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
+      const totalFrames = sortedFrames.length;
 
       const loadedAtlas: LoadedAtlas = {
         data: atlasData,
         textureURL,
         totalFrames,
-        frames,
+        frames: sortedFrames,
       };
 
       this.loadedAtlas = loadedAtlas;

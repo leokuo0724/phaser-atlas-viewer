@@ -11,6 +11,10 @@ import { FrameController, FrameControllerEvents } from "./core/FrameController";
 import { FrameData } from "./types/AtlasTypes";
 import { ControlPanel, ControlPanelEvents } from "./components/ControlPanel";
 import { FrameInfo, FrameInfoEvents } from "./components/FrameInfo";
+import {
+  ProgressIndicator,
+  ProgressIndicatorEvents,
+} from "./components/ProgressIndicator";
 
 class PhaserAtlasViewer {
   private game: Phaser.Game | null = null;
@@ -23,6 +27,7 @@ class PhaserAtlasViewer {
   private frameController: FrameController | null = null;
   private controlPanel: ControlPanel | null = null;
   private frameInfo: FrameInfo | null = null;
+  private progressIndicator: ProgressIndicator | null = null;
 
   constructor() {
     this.initializeElements();
@@ -105,12 +110,16 @@ class PhaserAtlasViewer {
     const controlEvents: ControlPanelEvents = {
       onPlay: () => this.frameController?.play(),
       onPause: () => this.frameController?.pause(),
-      onFrameRateChange: (fps: number) => this.frameController?.setFrameRate(fps),
+      onStop: () => this.frameController?.stop(),
+      onFrameRateChange: (fps: number) =>
+        this.frameController?.setFrameRate(fps),
       onFrameJump: (frameIndex: number) => this.setCurrentFrame(frameIndex),
       onStepForward: () => this.frameController?.nextFrame(),
       onStepBackward: () => this.frameController?.previousFrame(),
       onGoToFirst: () => this.frameController?.goToFirstFrame(),
-      onGoToLast: () => this.frameController?.goToLastFrame()
+      onGoToLast: () => this.frameController?.goToLastFrame(),
+      onLoopToggle: (enabled: boolean) =>
+        this.frameController?.setLooping(enabled),
     };
 
     this.controlPanel = new ControlPanel(
@@ -122,7 +131,7 @@ class PhaserAtlasViewer {
 
     // Initialize frame info display
     const frameInfoEvents: FrameInfoEvents = {
-      onFrameJump: (frameIndex: number) => this.setCurrentFrame(frameIndex)
+      onFrameJump: (frameIndex: number) => this.setCurrentFrame(frameIndex),
     };
 
     this.frameInfo = new FrameInfo(
@@ -131,12 +140,30 @@ class PhaserAtlasViewer {
       this.elements.totalFrames as HTMLSpanElement,
       frameInfoEvents
     );
+
+    // Initialize progress indicator
+    const progressEvents: ProgressIndicatorEvents = {
+      onProgressChange: (progress: number) => {
+        if (this.frameController) {
+          this.frameController.setFrameFromProgress(progress);
+        }
+      },
+    };
+
+    this.progressIndicator = new ProgressIndicator(
+      this.elements.scrubBar as HTMLDivElement,
+      this.elements.scrubHandle as HTMLDivElement,
+      progressEvents
+    );
+
+    // Add progress indicator styles
+    this.progressIndicator.addStyles();
   }
 
   private setupEventListeners(): void {
     // Scrub bar interactions (enhanced)
     this.setupScrubBarListeners();
-    
+
     // Show keyboard shortcuts info
     if (this.controlPanel) {
       this.controlPanel.showKeyboardShortcuts();
@@ -150,25 +177,35 @@ class PhaserAtlasViewer {
     const updateFrameFromPosition = (clientX: number) => {
       if (this.state.totalFrames === 0) return;
 
-      const rect = (this.elements.scrubBar as HTMLDivElement).getBoundingClientRect();
-      const position = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const frameIndex = Math.floor(position * Math.max(0, this.state.totalFrames - 1));
+      const rect = (
+        this.elements.scrubBar as HTMLDivElement
+      ).getBoundingClientRect();
+      const position = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width)
+      );
+      const frameIndex = Math.floor(
+        position * Math.max(0, this.state.totalFrames - 1)
+      );
       this.setCurrentFrame(frameIndex);
     };
 
     // Enhanced mouse events with better UX
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      isDragging = true;
-      wasDragging = false;
-      updateFrameFromPosition(e.clientX);
-      (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grabbing";
-      
-      // Pause animation while dragging
-      if (this.frameController?.getIsPlaying()) {
-        this.frameController.pause();
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "mousedown",
+      (e) => {
+        e.preventDefault();
+        isDragging = true;
+        wasDragging = false;
+        updateFrameFromPosition(e.clientX);
+        (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grabbing";
+
+        // Pause animation while dragging
+        if (this.frameController?.getIsPlaying()) {
+          this.frameController.pause();
+        }
       }
-    });
+    );
 
     document.addEventListener("mousemove", (e) => {
       if (isDragging) {
@@ -181,7 +218,7 @@ class PhaserAtlasViewer {
       if (isDragging) {
         isDragging = false;
         (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grab";
-        
+
         // Reset drag flag after a small delay to prevent click event
         setTimeout(() => {
           wasDragging = false;
@@ -190,21 +227,27 @@ class PhaserAtlasViewer {
     });
 
     // Click to jump (only if not dragging)
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("click", (e) => {
-      if (!wasDragging) {
-        updateFrameFromPosition(e.clientX);
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "click",
+      (e) => {
+        if (!wasDragging) {
+          updateFrameFromPosition(e.clientX);
+        }
       }
-    });
+    );
 
     // Touch events for mobile support
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      isDragging = true;
-      const touch = e.touches[0];
-      if (touch) {
-        updateFrameFromPosition(touch.clientX);
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "touchstart",
+      (e) => {
+        e.preventDefault();
+        isDragging = true;
+        const touch = e.touches[0];
+        if (touch) {
+          updateFrameFromPosition(touch.clientX);
+        }
       }
-    });
+    );
 
     document.addEventListener("touchmove", (e) => {
       if (isDragging) {
@@ -223,17 +266,25 @@ class PhaserAtlasViewer {
     });
 
     // Hover effects
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("mouseenter", () => {
-      if (!isDragging) {
-        (this.elements.scrubHandle as HTMLDivElement).style.backgroundColor = "#2980b9";
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "mouseenter",
+      () => {
+        if (!isDragging) {
+          (this.elements.scrubHandle as HTMLDivElement).style.backgroundColor =
+            "#2980b9";
+        }
       }
-    });
+    );
 
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("mouseleave", () => {
-      if (!isDragging) {
-        (this.elements.scrubHandle as HTMLDivElement).style.backgroundColor = "#3498db";
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "mouseleave",
+      () => {
+        if (!isDragging) {
+          (this.elements.scrubHandle as HTMLDivElement).style.backgroundColor =
+            "#3498db";
+        }
       }
-    });
+    );
   }
 
   private async handleFilesReady(
@@ -343,6 +394,9 @@ class PhaserAtlasViewer {
         if (this.controlPanel) {
           this.controlPanel.updatePlayState(isPlaying);
         }
+        if (this.progressIndicator) {
+          this.progressIndicator.setAnimating(isPlaying);
+        }
       },
       onFrameRateChange: (fps: number) => {
         this.state.frameRate = fps;
@@ -369,7 +423,6 @@ class PhaserAtlasViewer {
     }
   }
 
-
   private updateUI(): void {
     // Update frame info using the frame info component
     const currentFrameData = this.getCurrentFrameData();
@@ -381,18 +434,30 @@ class PhaserAtlasViewer {
       );
     }
 
-    // Update scrub bar position
+    // Update progress indicator
+    if (this.progressIndicator) {
+      this.progressIndicator.updateProgress(
+        this.state.currentFrame,
+        this.state.totalFrames
+      );
+    }
+
+    // Update scrub bar position (fallback)
     this.updateScrubBarPosition();
   }
 
   private updateScrubBarPosition(): void {
     if (this.state.totalFrames <= 0) return;
 
-    const position = this.state.currentFrame / Math.max(1, this.state.totalFrames - 1);
-    const scrubBarWidth = (this.elements.scrubBar as HTMLDivElement).offsetWidth;
+    const position =
+      this.state.currentFrame / Math.max(1, this.state.totalFrames - 1);
+    const scrubBarWidth = (this.elements.scrubBar as HTMLDivElement)
+      .offsetWidth;
     const handlePosition = position * (scrubBarWidth - 16); // 16px = handle width
-    
-    (this.elements.scrubHandle as HTMLDivElement).style.left = `${handlePosition}px`;
+
+    (
+      this.elements.scrubHandle as HTMLDivElement
+    ).style.left = `${handlePosition}px`;
   }
 
   private getCurrentFrameData() {
@@ -434,6 +499,10 @@ class PhaserAtlasViewer {
       this.controlPanel.updatePlayState(false);
     }
 
+    if (this.progressIndicator) {
+      this.progressIndicator.cleanup();
+    }
+
     // Cleanup Phaser game
     if (this.game) {
       this.game.destroy(true);
@@ -448,6 +517,7 @@ class PhaserAtlasViewer {
     // Reset component references
     this.controlPanel = null;
     this.frameInfo = null;
+    this.progressIndicator = null;
   }
 }
 

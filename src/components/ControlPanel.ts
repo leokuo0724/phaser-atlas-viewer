@@ -1,12 +1,14 @@
 export interface ControlPanelEvents {
   onPlay: () => void;
   onPause: () => void;
+  onStop: () => void;
   onFrameRateChange: (fps: number) => void;
   onFrameJump: (frameIndex: number) => void;
   onStepForward: () => void;
   onStepBackward: () => void;
   onGoToFirst: () => void;
   onGoToLast: () => void;
+  onLoopToggle: (enabled: boolean) => void;
 }
 
 export class ControlPanel {
@@ -17,6 +19,7 @@ export class ControlPanel {
 
   private isPlaying: boolean = false;
   private frameRate: number = 12;
+  private isLooping: boolean = true;
 
   constructor(
     playButton: HTMLButtonElement,
@@ -73,6 +76,11 @@ export class ControlPanel {
           }
           break;
 
+        case 'Escape': // Stop and go to first frame
+          e.preventDefault();
+          this.events.onStop();
+          break;
+
         case 'ArrowLeft': // Previous frame
           e.preventDefault();
           this.events.onStepBackward();
@@ -121,6 +129,12 @@ export class ControlPanel {
           e.preventDefault();
           this.adjustFrameRate(-1);
           break;
+
+        case 'l':
+        case 'L': // Toggle loop
+          e.preventDefault();
+          this.toggleLoop();
+          break;
       }
     });
   }
@@ -145,6 +159,14 @@ export class ControlPanel {
     this.events.onFrameRateChange(newRate);
   }
 
+  private toggleLoop(): void {
+    this.isLooping = !this.isLooping;
+    this.events.onLoopToggle(this.isLooping);
+    
+    // Visual feedback
+    console.log(`Loop ${this.isLooping ? 'enabled' : 'disabled'}`);
+  }
+
   public updatePlayState(isPlaying: boolean): void {
     this.isPlaying = isPlaying;
     this.playButton.textContent = isPlaying ? 'Pause' : 'Play';
@@ -164,14 +186,24 @@ export class ControlPanel {
     return this.frameRate;
   }
 
+  public updateLoopState(isLooping: boolean): void {
+    this.isLooping = isLooping;
+  }
+
+  public getLoopState(): boolean {
+    return this.isLooping;
+  }
+
   // Add visual indicators for keyboard shortcuts
   public showKeyboardShortcuts(): void {
     const shortcuts = [
       'Spacebar: Play/Pause',
+      'Esc: Stop and go to first frame',
       '← →: Previous/Next frame',
       'Home/End: First/Last frame',
       'J: Jump to frame',
       '+/-: Adjust frame rate',
+      'L: Toggle loop',
       ', .: Step backward/forward'
     ];
 

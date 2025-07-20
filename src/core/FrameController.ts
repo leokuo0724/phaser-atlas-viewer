@@ -12,6 +12,7 @@ export class FrameController {
   private isPlaying: boolean = false;
   private frameRate: number = 12; // Default 12 FPS
   private animationTimer: NodeJS.Timeout | null = null;
+  private isLooping: boolean = true; // Default to loop enabled
   private events: FrameControllerEvents;
   private getFrameDataCallback: (index: number) => FrameData | null;
 
@@ -48,7 +49,18 @@ export class FrameController {
   public nextFrame(): void {
     if (this.totalFrames === 0) return;
 
-    const nextIndex = (this.currentFrame + 1) % this.totalFrames;
+    let nextIndex = this.currentFrame + 1;
+
+    if (nextIndex >= this.totalFrames) {
+      if (this.isLooping) {
+        nextIndex = 0; // Loop back to first frame
+      } else {
+        // Stop at last frame if not looping
+        this.pause();
+        return;
+      }
+    }
+
     this.setFrame(nextIndex);
   }
 
@@ -101,6 +113,14 @@ export class FrameController {
     }
 
     this.events.onFrameRateChange(fps);
+  }
+
+  public setLooping(enabled: boolean): void {
+    this.isLooping = enabled;
+  }
+
+  public getLooping(): boolean {
+    return this.isLooping;
   }
 
   private startAnimation(): void {
@@ -188,6 +208,7 @@ export class FrameController {
     isPlaying: boolean;
     frameRate: number;
     progress: number;
+    isLooping: boolean;
   } {
     return {
       currentFrame: this.currentFrame,
@@ -195,6 +216,7 @@ export class FrameController {
       isPlaying: this.isPlaying,
       frameRate: this.frameRate,
       progress: this.getProgress(),
+      isLooping: this.isLooping,
     };
   }
 }

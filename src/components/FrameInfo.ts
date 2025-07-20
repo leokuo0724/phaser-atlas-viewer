@@ -1,4 +1,4 @@
-import { FrameData } from '../types/AtlasTypes';
+import { FrameData } from "../types/AtlasTypes";
 
 export interface FrameInfoEvents {
   onFrameJump: (frameIndex: number) => void;
@@ -29,11 +29,11 @@ export class FrameInfo {
 
   private setupInteractivity(): void {
     // Make frame index clickable for direct frame input
-    this.currentFrameIndexElement.style.cursor = 'pointer';
-    this.currentFrameIndexElement.style.textDecoration = 'underline';
-    this.currentFrameIndexElement.title = 'Click to jump to specific frame';
+    this.currentFrameIndexElement.style.cursor = "pointer";
+    this.currentFrameIndexElement.style.textDecoration = "underline";
+    this.currentFrameIndexElement.title = "Click to jump to specific frame";
 
-    this.currentFrameIndexElement.addEventListener('click', () => {
+    this.currentFrameIndexElement.addEventListener("click", () => {
       this.promptForFrameJump();
     });
   }
@@ -48,11 +48,19 @@ export class FrameInfo {
 
     if (input !== null) {
       const frameIndex = parseInt(input.trim());
-      
-      if (!isNaN(frameIndex) && frameIndex >= 0 && frameIndex < this.totalFrames) {
+
+      if (
+        !isNaN(frameIndex) &&
+        frameIndex >= 0 &&
+        frameIndex < this.totalFrames
+      ) {
         this.events.onFrameJump(frameIndex);
       } else {
-        alert(`Please enter a valid frame number between 0 and ${this.totalFrames - 1}`);
+        alert(
+          `Please enter a valid frame number between 0 and ${
+            this.totalFrames - 1
+          }`
+        );
       }
     }
   }
@@ -66,17 +74,18 @@ export class FrameInfo {
     this.totalFrames = totalFrames;
 
     // Update frame name
-    this.currentFrameNameElement.textContent = frameData?.filename || '-';
-    
+    this.currentFrameNameElement.textContent = frameData?.filename || "-";
+
     // Update frame index
     this.currentFrameIndexElement.textContent = frameIndex.toString();
-    
+
     // Update total frames
-    this.totalFramesElement.textContent = totalFrames.toString();
+    this.totalFramesElement.textContent = (totalFrames - 1).toString();
 
     // Update title for accessibility
-    this.currentFrameIndexElement.title = 
-      `Frame ${frameIndex} of ${totalFrames - 1}. Click to jump to specific frame.`;
+    this.currentFrameIndexElement.title = `Frame ${frameIndex} of ${
+      totalFrames - 1
+    }. Click to jump to specific frame.`;
   }
 
   public setFrameJumpHandler(events: FrameInfoEvents): void {
@@ -91,7 +100,7 @@ export class FrameInfo {
     return {
       currentFrame: this.currentFrame,
       totalFrames: this.totalFrames,
-      frameName: this.currentFrameNameElement.textContent || '-'
+      frameName: this.currentFrameNameElement.textContent || "-",
     };
   }
 }

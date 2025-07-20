@@ -4,9 +4,11 @@ import {
   DEFAULT_APP_STATE,
   AppState,
 } from "./types/AppTypes";
-import { AtlasData } from "./types/AtlasTypes";
 import { FileUploader, FileUploadEvents } from "./components/FileUploader";
 import { AtlasLoader } from "./core/AtlasLoader";
+import { SpriteRenderer, SpriteRenderEvents } from "./core/SpriteRenderer";
+import { FrameController, FrameControllerEvents } from "./core/FrameController";
+import { FrameData } from "./types/AtlasTypes";
 
 class PhaserAtlasViewer {
   private game: Phaser.Game | null = null;
@@ -15,6 +17,8 @@ class PhaserAtlasViewer {
   private elements: { [key: string]: HTMLElement } = {};
   private fileUploader: FileUploader | null = null;
   private atlasLoader: AtlasLoader | null = null;
+  private spriteRenderer: SpriteRenderer | null = null;
+  private frameController: FrameController | null = null;
 
   constructor() {
     this.initializeElements();
@@ -40,10 +44,22 @@ class PhaserAtlasViewer {
     const errorMessage = document.getElementById("errorMessage");
     const gameContainer = document.getElementById("gameContainer");
 
-    if (!textureInput || !atlasInput || !runButton || !viewerSection || 
-        !playButton || !scrubBar || !scrubHandle || !frameRateSlider || 
-        !frameRateValue || !currentFrameName || !currentFrameIndex || 
-        !totalFrames || !errorMessage || !gameContainer) {
+    if (
+      !textureInput ||
+      !atlasInput ||
+      !runButton ||
+      !viewerSection ||
+      !playButton ||
+      !scrubBar ||
+      !scrubHandle ||
+      !frameRateSlider ||
+      !frameRateValue ||
+      !currentFrameName ||
+      !currentFrameIndex ||
+      !totalFrames ||
+      !errorMessage ||
+      !gameContainer
+    ) {
       throw new Error("Required DOM elements not found");
     }
 
@@ -69,8 +85,9 @@ class PhaserAtlasViewer {
 
     // Initialize file uploader with event handlers
     const uploadEvents: FileUploadEvents = {
-      onFilesReady: (textureFile: File, atlasFile: File) => this.handleFilesReady(textureFile, atlasFile),
-      onError: (message: string) => this.showError(message)
+      onFilesReady: (textureFile: File, atlasFile: File) =>
+        this.handleFilesReady(textureFile, atlasFile),
+      onError: (message: string) => this.showError(message),
     };
 
     this.fileUploader = new FileUploader(
@@ -83,15 +100,22 @@ class PhaserAtlasViewer {
 
   private setupEventListeners(): void {
     // Frame rate slider
-    (this.elements.frameRateSlider as HTMLInputElement).addEventListener("input", (e) => {
-      const target = e.target as HTMLInputElement;
-      const fps = parseInt(target.value);
-      this.state.frameRate = fps;
-      (this.elements.frameRateValue as HTMLSpanElement).textContent = fps.toString();
-    });
+    (this.elements.frameRateSlider as HTMLInputElement).addEventListener(
+      "input",
+      (e) => {
+        const target = e.target as HTMLInputElement;
+        const fps = parseInt(target.value);
+        this.state.frameRate = fps;
+        (this.elements.frameRateValue as HTMLSpanElement).textContent =
+          fps.toString();
+      }
+    );
 
     // Play/Pause button
-    (this.elements.playButton as HTMLButtonElement).addEventListener("click", () => this.togglePlay());
+    (this.elements.playButton as HTMLButtonElement).addEventListener(
+      "click",
+      () => this.togglePlay()
+    );
 
     // Scrub bar interactions
     this.setupScrubBarListeners();
@@ -101,7 +125,9 @@ class PhaserAtlasViewer {
     let isDragging = false;
 
     const updateFrameFromPosition = (clientX: number) => {
-      const rect = (this.elements.scrubBar as HTMLDivElement).getBoundingClientRect();
+      const rect = (
+        this.elements.scrubBar as HTMLDivElement
+      ).getBoundingClientRect();
       const position = Math.max(
         0,
         Math.min(1, (clientX - rect.left) / rect.width)
@@ -113,11 +139,14 @@ class PhaserAtlasViewer {
     };
 
     // Mouse events
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("mousedown", (e) => {
-      isDragging = true;
-      updateFrameFromPosition(e.clientX);
-      (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grabbing";
-    });
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "mousedown",
+      (e) => {
+        isDragging = true;
+        updateFrameFromPosition(e.clientX);
+        (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grabbing";
+      }
+    );
 
     document.addEventListener("mousemove", (e) => {
       if (isDragging) {
@@ -133,14 +162,20 @@ class PhaserAtlasViewer {
     });
 
     // Click to jump
-    (this.elements.scrubBar as HTMLDivElement).addEventListener("click", (e) => {
-      if (!isDragging) {
-        updateFrameFromPosition(e.clientX);
+    (this.elements.scrubBar as HTMLDivElement).addEventListener(
+      "click",
+      (e) => {
+        if (!isDragging) {
+          updateFrameFromPosition(e.clientX);
+        }
       }
-    });
+    );
   }
 
-  private async handleFilesReady(textureFile: File, atlasFile: File): Promise<void> {
+  private async handleFilesReady(
+    textureFile: File,
+    atlasFile: File
+  ): Promise<void> {
     try {
       if (!this.atlasLoader) {
         throw new Error("Atlas loader not initialized");
@@ -150,7 +185,10 @@ class PhaserAtlasViewer {
       this.showError("Loading atlas...");
 
       // Load and validate atlas
-      const loadedAtlas = await this.atlasLoader.loadAtlas(textureFile, atlasFile);
+      const loadedAtlas = await this.atlasLoader.loadAtlas(
+        textureFile,
+        atlasFile
+      );
 
       // Update application state
       this.state.atlasData = loadedAtlas.data;
@@ -158,56 +196,35 @@ class PhaserAtlasViewer {
       this.state.currentFrame = 0;
       this.state.textureLoaded = false;
 
-      // Load into Phaser
-      await this.loadTextureIntoPhaser(loadedAtlas.textureURL, loadedAtlas.data);
+      // Load into Phaser sprite renderer
+      if (this.spriteRenderer) {
+        await this.spriteRenderer.loadAtlasTexture(
+          loadedAtlas.textureURL,
+          loadedAtlas.frames
+        );
+      }
+
+      // Initialize frame controller
+      if (this.frameController) {
+        this.frameController.initialize(loadedAtlas.totalFrames);
+      }
 
       // Success - show viewer
       this.showError("");
       this.showViewer();
       this.updateUI();
 
-      console.log('Atlas loaded successfully:', {
+      console.log("Atlas loaded successfully:", {
         totalFrames: loadedAtlas.totalFrames,
         textureSize: loadedAtlas.data.textures[0]?.size,
-        imageName: loadedAtlas.data.textures[0]?.image
+        imageName: loadedAtlas.data.textures[0]?.image,
       });
-
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error occurred";
+      const message =
+        error instanceof Error ? error.message : "Unknown error occurred";
       this.showError(`Failed to load atlas: ${message}`);
-      console.error('Atlas loading failed:', error);
+      console.error("Atlas loading failed:", error);
     }
-  }
-
-  private async loadTextureIntoPhaser(
-    textureURL: string,
-    _atlasData: AtlasData
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.scene) {
-        reject(new Error("Phaser scene not initialized"));
-        return;
-      }
-
-      // Remove existing textures
-      if (this.scene.textures.exists("atlas-texture")) {
-        this.scene.textures.remove("atlas-texture");
-      }
-
-      // Load the texture
-      this.scene.load.image("atlas-texture", textureURL);
-
-      this.scene.load.once("complete", () => {
-        this.state.textureLoaded = true;
-        resolve();
-      });
-
-      this.scene.load.once("loaderror", () => {
-        reject(new Error("Failed to load texture image"));
-      });
-
-      this.scene.load.start();
-    });
   }
 
   private initializePhaser(): void {
@@ -231,44 +248,90 @@ class PhaserAtlasViewer {
   private onSceneCreate(): void {
     if (this.game && this.game.scene.scenes[0]) {
       this.scene = this.game.scene.scenes[0];
+      this.initializeRendering();
     }
   }
 
+  private initializeRendering(): void {
+    if (!this.scene) return;
+
+    // Initialize sprite renderer
+    const spriteEvents: SpriteRenderEvents = {
+      onFrameChanged: (frameIndex: number, _frameData: FrameData) => {
+        this.state.currentFrame = frameIndex;
+        this.updateUI();
+      },
+      onRenderError: (error: string) =>
+        this.showError(`Rendering error: ${error}`),
+    };
+
+    this.spriteRenderer = new SpriteRenderer(this.scene, spriteEvents);
+
+    // Initialize frame controller
+    const frameEvents: FrameControllerEvents = {
+      onFrameChange: (frameIndex: number, _frameData: FrameData | null) => {
+        if (this.spriteRenderer) {
+          this.spriteRenderer.setFrame(frameIndex);
+        }
+      },
+      onPlayStateChange: (isPlaying: boolean) => {
+        this.state.isPlaying = isPlaying;
+        (this.elements.playButton as HTMLButtonElement).textContent = isPlaying
+          ? "Pause"
+          : "Play";
+      },
+      onFrameRateChange: (fps: number) => {
+        this.state.frameRate = fps;
+        (this.elements.frameRateValue as HTMLSpanElement).textContent =
+          fps.toString();
+        (this.elements.frameRateSlider as HTMLInputElement).value =
+          fps.toString();
+      },
+    };
+
+    this.frameController = new FrameController(frameEvents, (index: number) => {
+      return this.atlasLoader?.getFrameData(index) || null;
+    });
+  }
+
   private onSceneUpdate(): void {
-    // Animation update logic will be implemented in Phase 5
+    // Animation update logic - handled by FrameController
   }
 
   private setCurrentFrame(frameIndex: number): void {
     if (frameIndex < 0 || frameIndex >= this.state.totalFrames) return;
 
-    this.state.currentFrame = frameIndex;
-    this.updateUI();
-    // Frame rendering will be implemented in Phase 3
+    if (this.frameController) {
+      this.frameController.setFrame(frameIndex);
+    }
   }
 
   private togglePlay(): void {
-    this.state.isPlaying = !this.state.isPlaying;
-    (this.elements.playButton as HTMLButtonElement).textContent = this.state.isPlaying
-      ? "Pause"
-      : "Play";
-    // Auto-play logic will be implemented in Phase 5
+    if (this.frameController) {
+      this.frameController.togglePlay();
+    }
   }
 
   private updateUI(): void {
     // Update frame info
     const currentFrame = this.getCurrentFrameData();
-    (this.elements.currentFrameName as HTMLSpanElement).textContent = currentFrame?.filename || "-";
+    (this.elements.currentFrameName as HTMLSpanElement).textContent =
+      currentFrame?.filename || "-";
     (this.elements.currentFrameIndex as HTMLSpanElement).textContent =
       this.state.currentFrame.toString();
-    (this.elements.totalFrames as HTMLSpanElement).textContent = this.state.totalFrames.toString();
+    (this.elements.totalFrames as HTMLSpanElement).textContent =
+      this.state.totalFrames.toString();
 
     // Update scrub bar position
     if (this.state.totalFrames > 0) {
       const position =
         this.state.currentFrame / Math.max(1, this.state.totalFrames - 1);
-      const scrubBarWidth = (this.elements.scrubBar as HTMLDivElement).offsetWidth;
+      const scrubBarWidth = (this.elements.scrubBar as HTMLDivElement)
+        .offsetWidth;
       const handlePosition = position * (scrubBarWidth - 16); // 16px = handle width
-      (this.elements.scrubHandle as HTMLDivElement).style.left = `${handlePosition}px`;
+      (
+        this.elements.scrubHandle as HTMLDivElement
+      ).style.left = `${handlePosition}px`;
     }
   }
 
@@ -291,6 +354,16 @@ class PhaserAtlasViewer {
   }
 
   public cleanup(): void {
+    // Cleanup frame controller
+    if (this.frameController) {
+      this.frameController.cleanup();
+    }
+
+    // Cleanup sprite renderer
+    if (this.spriteRenderer) {
+      this.spriteRenderer.cleanup();
+    }
+
     // Cleanup atlas loader resources
     if (this.atlasLoader) {
       this.atlasLoader.cleanup();

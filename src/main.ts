@@ -9,6 +9,8 @@ import { AtlasLoader } from "./core/AtlasLoader";
 import { SpriteRenderer, SpriteRenderEvents } from "./core/SpriteRenderer";
 import { FrameController, FrameControllerEvents } from "./core/FrameController";
 import { FrameData } from "./types/AtlasTypes";
+import { ControlPanel, ControlPanelEvents } from "./components/ControlPanel";
+import { FrameInfo, FrameInfoEvents } from "./components/FrameInfo";
 
 class PhaserAtlasViewer {
   private game: Phaser.Game | null = null;
@@ -19,6 +21,8 @@ class PhaserAtlasViewer {
   private atlasLoader: AtlasLoader | null = null;
   private spriteRenderer: SpriteRenderer | null = null;
   private frameController: FrameController | null = null;
+  private controlPanel: ControlPanel | null = null;
+  private frameInfo: FrameInfo | null = null;
 
   constructor() {
     this.initializeElements();
@@ -96,60 +100,79 @@ class PhaserAtlasViewer {
       this.elements.runButton as HTMLButtonElement,
       uploadEvents
     );
+
+    // Initialize control panel
+    const controlEvents: ControlPanelEvents = {
+      onPlay: () => this.frameController?.play(),
+      onPause: () => this.frameController?.pause(),
+      onFrameRateChange: (fps: number) => this.frameController?.setFrameRate(fps),
+      onFrameJump: (frameIndex: number) => this.setCurrentFrame(frameIndex),
+      onStepForward: () => this.frameController?.nextFrame(),
+      onStepBackward: () => this.frameController?.previousFrame(),
+      onGoToFirst: () => this.frameController?.goToFirstFrame(),
+      onGoToLast: () => this.frameController?.goToLastFrame()
+    };
+
+    this.controlPanel = new ControlPanel(
+      this.elements.playButton as HTMLButtonElement,
+      this.elements.frameRateSlider as HTMLInputElement,
+      this.elements.frameRateValue as HTMLSpanElement,
+      controlEvents
+    );
+
+    // Initialize frame info display
+    const frameInfoEvents: FrameInfoEvents = {
+      onFrameJump: (frameIndex: number) => this.setCurrentFrame(frameIndex)
+    };
+
+    this.frameInfo = new FrameInfo(
+      this.elements.currentFrameName as HTMLSpanElement,
+      this.elements.currentFrameIndex as HTMLSpanElement,
+      this.elements.totalFrames as HTMLSpanElement,
+      frameInfoEvents
+    );
   }
 
   private setupEventListeners(): void {
-    // Frame rate slider
-    (this.elements.frameRateSlider as HTMLInputElement).addEventListener(
-      "input",
-      (e) => {
-        const target = e.target as HTMLInputElement;
-        const fps = parseInt(target.value);
-        this.state.frameRate = fps;
-        (this.elements.frameRateValue as HTMLSpanElement).textContent =
-          fps.toString();
-      }
-    );
-
-    // Play/Pause button
-    (this.elements.playButton as HTMLButtonElement).addEventListener(
-      "click",
-      () => this.togglePlay()
-    );
-
-    // Scrub bar interactions
+    // Scrub bar interactions (enhanced)
     this.setupScrubBarListeners();
+    
+    // Show keyboard shortcuts info
+    if (this.controlPanel) {
+      this.controlPanel.showKeyboardShortcuts();
+    }
   }
 
   private setupScrubBarListeners(): void {
     let isDragging = false;
+    let wasDragging = false;
 
     const updateFrameFromPosition = (clientX: number) => {
-      const rect = (
-        this.elements.scrubBar as HTMLDivElement
-      ).getBoundingClientRect();
-      const position = Math.max(
-        0,
-        Math.min(1, (clientX - rect.left) / rect.width)
-      );
-      const frameIndex = Math.floor(
-        position * Math.max(0, this.state.totalFrames - 1)
-      );
+      if (this.state.totalFrames === 0) return;
+
+      const rect = (this.elements.scrubBar as HTMLDivElement).getBoundingClientRect();
+      const position = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const frameIndex = Math.floor(position * Math.max(0, this.state.totalFrames - 1));
       this.setCurrentFrame(frameIndex);
     };
 
-    // Mouse events
-    (this.elements.scrubBar as HTMLDivElement).addEventListener(
-      "mousedown",
-      (e) => {
-        isDragging = true;
-        updateFrameFromPosition(e.clientX);
-        (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grabbing";
+    // Enhanced mouse events with better UX
+    (this.elements.scrubBar as HTMLDivElement).addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      isDragging = true;
+      wasDragging = false;
+      updateFrameFromPosition(e.clientX);
+      (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grabbing";
+      
+      // Pause animation while dragging
+      if (this.frameController?.getIsPlaying()) {
+        this.frameController.pause();
       }
-    );
+    });
 
     document.addEventListener("mousemove", (e) => {
       if (isDragging) {
+        wasDragging = true;
         updateFrameFromPosition(e.clientX);
       }
     });
@@ -158,18 +181,59 @@ class PhaserAtlasViewer {
       if (isDragging) {
         isDragging = false;
         (this.elements.scrubHandle as HTMLDivElement).style.cursor = "grab";
+        
+        // Reset drag flag after a small delay to prevent click event
+        setTimeout(() => {
+          wasDragging = false;
+        }, 10);
       }
     });
 
-    // Click to jump
-    (this.elements.scrubBar as HTMLDivElement).addEventListener(
-      "click",
-      (e) => {
-        if (!isDragging) {
-          updateFrameFromPosition(e.clientX);
+    // Click to jump (only if not dragging)
+    (this.elements.scrubBar as HTMLDivElement).addEventListener("click", (e) => {
+      if (!wasDragging) {
+        updateFrameFromPosition(e.clientX);
+      }
+    });
+
+    // Touch events for mobile support
+    (this.elements.scrubBar as HTMLDivElement).addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      isDragging = true;
+      const touch = e.touches[0];
+      if (touch) {
+        updateFrameFromPosition(touch.clientX);
+      }
+    });
+
+    document.addEventListener("touchmove", (e) => {
+      if (isDragging) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        if (touch) {
+          updateFrameFromPosition(touch.clientX);
         }
       }
-    );
+    });
+
+    document.addEventListener("touchend", () => {
+      if (isDragging) {
+        isDragging = false;
+      }
+    });
+
+    // Hover effects
+    (this.elements.scrubBar as HTMLDivElement).addEventListener("mouseenter", () => {
+      if (!isDragging) {
+        (this.elements.scrubHandle as HTMLDivElement).style.backgroundColor = "#2980b9";
+      }
+    });
+
+    (this.elements.scrubBar as HTMLDivElement).addEventListener("mouseleave", () => {
+      if (!isDragging) {
+        (this.elements.scrubHandle as HTMLDivElement).style.backgroundColor = "#3498db";
+      }
+    });
   }
 
   private async handleFilesReady(
@@ -276,16 +340,15 @@ class PhaserAtlasViewer {
       },
       onPlayStateChange: (isPlaying: boolean) => {
         this.state.isPlaying = isPlaying;
-        (this.elements.playButton as HTMLButtonElement).textContent = isPlaying
-          ? "Pause"
-          : "Play";
+        if (this.controlPanel) {
+          this.controlPanel.updatePlayState(isPlaying);
+        }
       },
       onFrameRateChange: (fps: number) => {
         this.state.frameRate = fps;
-        (this.elements.frameRateValue as HTMLSpanElement).textContent =
-          fps.toString();
-        (this.elements.frameRateSlider as HTMLInputElement).value =
-          fps.toString();
+        if (this.controlPanel) {
+          this.controlPanel.updateFrameRate(fps);
+        }
       },
     };
 
@@ -306,33 +369,30 @@ class PhaserAtlasViewer {
     }
   }
 
-  private togglePlay(): void {
-    if (this.frameController) {
-      this.frameController.togglePlay();
-    }
-  }
 
   private updateUI(): void {
-    // Update frame info
-    const currentFrame = this.getCurrentFrameData();
-    (this.elements.currentFrameName as HTMLSpanElement).textContent =
-      currentFrame?.filename || "-";
-    (this.elements.currentFrameIndex as HTMLSpanElement).textContent =
-      this.state.currentFrame.toString();
-    (this.elements.totalFrames as HTMLSpanElement).textContent =
-      this.state.totalFrames.toString();
+    // Update frame info using the frame info component
+    const currentFrameData = this.getCurrentFrameData();
+    if (this.frameInfo) {
+      this.frameInfo.updateFrameInfo(
+        this.state.currentFrame,
+        this.state.totalFrames,
+        currentFrameData
+      );
+    }
 
     // Update scrub bar position
-    if (this.state.totalFrames > 0) {
-      const position =
-        this.state.currentFrame / Math.max(1, this.state.totalFrames - 1);
-      const scrubBarWidth = (this.elements.scrubBar as HTMLDivElement)
-        .offsetWidth;
-      const handlePosition = position * (scrubBarWidth - 16); // 16px = handle width
-      (
-        this.elements.scrubHandle as HTMLDivElement
-      ).style.left = `${handlePosition}px`;
-    }
+    this.updateScrubBarPosition();
+  }
+
+  private updateScrubBarPosition(): void {
+    if (this.state.totalFrames <= 0) return;
+
+    const position = this.state.currentFrame / Math.max(1, this.state.totalFrames - 1);
+    const scrubBarWidth = (this.elements.scrubBar as HTMLDivElement).offsetWidth;
+    const handlePosition = position * (scrubBarWidth - 16); // 16px = handle width
+    
+    (this.elements.scrubHandle as HTMLDivElement).style.left = `${handlePosition}px`;
   }
 
   private getCurrentFrameData() {
@@ -369,6 +429,11 @@ class PhaserAtlasViewer {
       this.atlasLoader.cleanup();
     }
 
+    // Reset UI components
+    if (this.controlPanel) {
+      this.controlPanel.updatePlayState(false);
+    }
+
     // Cleanup Phaser game
     if (this.game) {
       this.game.destroy(true);
@@ -379,6 +444,10 @@ class PhaserAtlasViewer {
     if (this.fileUploader) {
       this.fileUploader.reset();
     }
+
+    // Reset component references
+    this.controlPanel = null;
+    this.frameInfo = null;
   }
 }
 

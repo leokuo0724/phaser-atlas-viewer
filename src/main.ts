@@ -5,15 +5,20 @@ import {
   AppState,
 } from "./types/AppTypes";
 import { AtlasData } from "./types/AtlasTypes";
+import { FileUploader, FileUploadEvents } from "./components/FileUploader";
+import { AtlasLoader } from "./core/AtlasLoader";
 
 class PhaserAtlasViewer {
   private game: Phaser.Game | null = null;
   private scene: Phaser.Scene | null = null;
   private state: AppState = { ...DEFAULT_APP_STATE };
   private elements: { [key: string]: HTMLElement } = {};
+  private fileUploader: FileUploader | null = null;
+  private atlasLoader: AtlasLoader | null = null;
 
   constructor() {
     this.initializeElements();
+    this.initializeComponents();
     this.setupEventListeners();
     this.initializePhaser();
   }
@@ -58,18 +63,25 @@ class PhaserAtlasViewer {
     this.elements.gameContainer = gameContainer as HTMLDivElement;
   }
 
+  private initializeComponents(): void {
+    // Initialize atlas loader
+    this.atlasLoader = new AtlasLoader();
+
+    // Initialize file uploader with event handlers
+    const uploadEvents: FileUploadEvents = {
+      onFilesReady: (textureFile: File, atlasFile: File) => this.handleFilesReady(textureFile, atlasFile),
+      onError: (message: string) => this.showError(message)
+    };
+
+    this.fileUploader = new FileUploader(
+      this.elements.textureInput as HTMLInputElement,
+      this.elements.atlasInput as HTMLInputElement,
+      this.elements.runButton as HTMLButtonElement,
+      uploadEvents
+    );
+  }
+
   private setupEventListeners(): void {
-    // File input change listeners
-    (this.elements.textureInput as HTMLInputElement).addEventListener("change", () =>
-      this.checkFilesReady()
-    );
-    (this.elements.atlasInput as HTMLInputElement).addEventListener("change", () =>
-      this.checkFilesReady()
-    );
-
-    // Run button
-    (this.elements.runButton as HTMLButtonElement).addEventListener("click", () => this.loadAtlas());
-
     // Frame rate slider
     (this.elements.frameRateSlider as HTMLInputElement).addEventListener("input", (e) => {
       const target = e.target as HTMLInputElement;
@@ -128,52 +140,42 @@ class PhaserAtlasViewer {
     });
   }
 
-  private checkFilesReady(): void {
-    const textureFile = (this.elements.textureInput as HTMLInputElement)
-      .files?.[0];
-    const atlasFile = (this.elements.atlasInput as HTMLInputElement).files?.[0];
-
-    (this.elements.runButton as HTMLButtonElement).disabled = !(textureFile && atlasFile);
-  }
-
-  private async loadAtlas(): Promise<void> {
+  private async handleFilesReady(textureFile: File, atlasFile: File): Promise<void> {
     try {
-      const textureFile = (this.elements.textureInput as HTMLInputElement)
-        .files?.[0];
-      const atlasFile = (this.elements.atlasInput as HTMLInputElement)
-        .files?.[0];
-
-      if (!textureFile || !atlasFile) {
-        throw new Error("Please select both texture and atlas files");
+      if (!this.atlasLoader) {
+        throw new Error("Atlas loader not initialized");
       }
 
-      // Parse atlas JSON
-      const atlasText = await atlasFile.text();
-      const atlasData: AtlasData = JSON.parse(atlasText);
+      // Show loading state
+      this.showError("Loading atlas...");
 
-      if (!atlasData.textures || atlasData.textures.length === 0) {
-        throw new Error("Invalid atlas format: no textures found");
-      }
+      // Load and validate atlas
+      const loadedAtlas = await this.atlasLoader.loadAtlas(textureFile, atlasFile);
 
-      // Update state
-      this.state.atlasData = atlasData;
-      this.state.totalFrames = atlasData.textures[0]?.frames.length || 0;
+      // Update application state
+      this.state.atlasData = loadedAtlas.data;
+      this.state.totalFrames = loadedAtlas.totalFrames;
       this.state.currentFrame = 0;
       this.state.textureLoaded = false;
 
-      // Create object URL for texture
-      const textureURL = URL.createObjectURL(textureFile);
-
       // Load into Phaser
-      await this.loadTextureIntoPhaser(textureURL, atlasData);
+      await this.loadTextureIntoPhaser(loadedAtlas.textureURL, loadedAtlas.data);
 
+      // Success - show viewer
       this.showError("");
       this.showViewer();
       this.updateUI();
+
+      console.log('Atlas loaded successfully:', {
+        totalFrames: loadedAtlas.totalFrames,
+        textureSize: loadedAtlas.data.textures[0]?.size,
+        imageName: loadedAtlas.data.textures[0]?.image
+      });
+
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error occurred";
+      const message = error instanceof Error ? error.message : "Unknown error occurred";
       this.showError(`Failed to load atlas: ${message}`);
+      console.error('Atlas loading failed:', error);
     }
   }
 
@@ -271,10 +273,8 @@ class PhaserAtlasViewer {
   }
 
   private getCurrentFrameData() {
-    if (!this.state.atlasData || !this.state.atlasData.textures[0]) return null;
-    return (
-      this.state.atlasData.textures[0].frames[this.state.currentFrame] || null
-    );
+    if (!this.atlasLoader) return null;
+    return this.atlasLoader.getFrameData(this.state.currentFrame);
   }
 
   private showViewer(): void {
@@ -287,6 +287,24 @@ class PhaserAtlasViewer {
       (this.elements.errorMessage as HTMLDivElement).classList.add("show");
     } else {
       (this.elements.errorMessage as HTMLDivElement).classList.remove("show");
+    }
+  }
+
+  public cleanup(): void {
+    // Cleanup atlas loader resources
+    if (this.atlasLoader) {
+      this.atlasLoader.cleanup();
+    }
+
+    // Cleanup Phaser game
+    if (this.game) {
+      this.game.destroy(true);
+      this.game = null;
+    }
+
+    // Reset file uploader
+    if (this.fileUploader) {
+      this.fileUploader.reset();
     }
   }
 }

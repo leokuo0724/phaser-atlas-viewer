@@ -25,7 +25,7 @@ A web-based tool for viewing and debugging TexturePacker atlas animations using 
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/leokuo0724/phaser-atlas-viewer.git
 cd phaser-atlas-viewer
 
 # Install dependencies

@@ -4,6 +4,10 @@ A web-based tool for viewing and debugging TexturePacker atlas animations using 
 
 ![Phaser Atlas Viewer](https://img.shields.io/badge/Phaser-3.70.0-blue?style=for-the-badge) ![TypeScript](https://img.shields.io/badge/TypeScript-5.1.6-blue?style=for-the-badge) ![Vite](https://img.shields.io/badge/Vite-5.0.0-purple?style=for-the-badge) ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
+## 🚀 Live Demo
+
+**Try it now: [https://leokuo0724.github.io/phaser-atlas-viewer/](https://leokuo0724.github.io/phaser-atlas-viewer/)**
+
 ## Features
 
 ### 🎮 Core Functionality
